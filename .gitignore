@@ -1,0 +1,22 @@
+__pycache__/
+*.pyc
+.DS_Store
+.ipynb_checkpoints/
+
+# Output directories and zips
+reproduced/
+reproduced_paper/
+reproduced_paper_visual/
+article_reproduced_figures_same/
+reproduced_paper_v33/
+*.zip
+
+# Local environment/scratch files
+.env
+.venv
+venv/
+env/
+clean_legacy.py
+clean_reproduce_script.py
+find_parentheses.py
+find_paper_like.py
