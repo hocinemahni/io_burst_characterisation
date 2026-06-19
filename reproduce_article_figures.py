@@ -19,8 +19,7 @@ Darshan POSIX records are aggregated records. When DXT_POSIX segments are
 available, they are used as true per-operation events. When DXT is not available
 (e.g., many E3SM logs), the script can reconstruct a time series by binning
 POSIX aggregate records over their Darshan start/end intervals. This is the
-method used by default for E3SM, because the paper-like E3SM figure is a dense
-time series over the execution interval, not one point per POSIX record.
+method used by default for E3SM.
 
     BW(t) = bytes transferred in temporal bin / bin width / number of nodes
 
@@ -46,8 +45,6 @@ from typing import Dict, Iterable, List, Optional, Tuple
 import numpy as np
 import pandas as pd
 
-# Force a non-interactive backend. This avoids Windows/Tkinter errors such as:
-# ValueError: PyCapsule_New called with null pointer
 # The script only saves PNG/PDF files and does not need a GUI window.
 import matplotlib
 matplotlib.use("Agg")
@@ -55,32 +52,6 @@ import matplotlib.pyplot as plt
 
 MB = 1024.0 * 1024.0
 
-# ---------------------------------------------------------------------------
-# v25: paper-like ACF/FFT reconstruction
-# ---------------------------------------------------------------------------
-PAPER_EXPECTED_FFT_HZ = {
-    "NAMD": 5.547,
-    "E3SM": 0.0088,
-    "HACC": 0.254,
-    "IOR": 0.197,
-}
-PAPER_FFT_XLIM = {
-    "NAMD": 6.5,
-    "E3SM": 0.5,
-    "HACC": 850.0,
-    "IOR": 5000.0,
-}
-PAPER_FFT_YLIM = {
-    "NAMD": 7.0,
-    "E3SM": 160000.0,
-    "HACC": 430.0,
-    "IOR": 11000.0,
-}
-
-
-# ---------------------------------------------------------------------------
-# Standard ACF/FFT algorithms (No paper-specific heuristics or visual hacks)
-# ---------------------------------------------------------------------------
 
 # ---------------------------------------------------------------------------
 # Darshan POSIX/DXT binary layouts.
@@ -393,7 +364,7 @@ def posix_to_article_events(posix: pd.DataFrame) -> pd.DataFrame:
 def posix_to_time_binned_events(posix: pd.DataFrame, bin_width: float = 1.0, nodes: float = 1.0) -> pd.DataFrame:
     """Convert POSIX aggregate records into a dense temporal bandwidth series.
 
-    This is the recommended reconstruction for POSIX-only logs such as the
+    This is the construction for POSIX-only logs such as the
     E3SM trace used in the paper. Darshan POSIX does not store every operation
     timestamp unless DXT is enabled. It stores per-record aggregate volumes and
     first/last read/write timestamps. Therefore, instead of treating each POSIX
@@ -406,9 +377,7 @@ def posix_to_time_binned_events(posix: pd.DataFrame, bin_width: float = 1.0, nod
         bandwidth_mb_s(t) = bytes_in_bin / bin_width / 2^20 / nodes
 
     For E3SM, use nodes=8 by default because the analyzed run used 512 MPI
-    processes across 8 Theta nodes. Keeping empty bins is important: it preserves
-    low-activity/idle periods and makes the PDF/CDF and adaptive thresholds
-    closer to the article figures.
+    processes across 8 Theta nodes.
     """
     if posix is None or posix.empty:
         return pd.DataFrame()
@@ -573,11 +542,7 @@ def posix_to_operation_expanded_events(
     include_zero_reads: bool = True,
     operation_time_mode: str = "write_time_over_all_ops",
 ) -> pd.DataFrame:
-    """Reconstruct an operation-like time series from POSIX aggregate records.
-
-    This is intended for POSIX-only logs such as the E3SM trace when the desired
-    figure is the original paper-style ABPM plot: many samples across the whole
-    execution, values reaching about 200 MB/s, and many low/zero points.
+    """construct an operation-like time series from POSIX aggregate records.
 
     Method:
       1. Expand each POSIX record into representative operations using Darshan
@@ -636,7 +601,6 @@ def posix_to_operation_expanded_events(
                         "bandwidth_mb_s": float(bwv),
                     })
 
-        # Read operations: include zeros/low points to preserve the low part of the original figure.
         if include_zero_reads and reads > 0:
             rs = float(r.get("POSIX_F_READ_START_TIMESTAMP", 0.0))
             re = float(r.get("POSIX_F_READ_END_TIMESTAMP", 0.0))
@@ -667,12 +631,11 @@ def posix_to_operation_expanded_events(
     if out.empty:
         return out
 
-    # Normalize timestamp to start at zero like the article figures.
+    # Normalize timestamp to start at zero.
     out = out.sort_values("timestamp").reset_index(drop=True)
     out["timestamp"] = out["timestamp"] - float(out["timestamp"].min())
     out["end_time"] = out["end_time"] - float(out["end_time"].min())
-
-    # Downsample deterministically for plotting while preserving temporal order.
+.
     if max_points and len(out) > max_points:
         idx = np.linspace(0, len(out) - 1, int(max_points)).round().astype(int)
         out = out.iloc[idx].copy().reset_index(drop=True)
@@ -718,8 +681,7 @@ def spread_sparse_posix_timestamps(events: pd.DataFrame) -> pd.DataFrame:
     such as E3SM, many records have the same POSIX start timestamp and the
     same end timestamp. If plotted directly, all points collapse into two
     vertical columns, which is not the representation used in the original
-    article figures. The article visualizes the reconstructed I/O activity
-    over the whole application interval.
+    article figures.
 
     This function keeps the Darshan-derived bandwidth values unchanged, but
     redistributes the POSIX aggregate records uniformly between the first and
@@ -772,11 +734,7 @@ def spread_sparse_posix_timestamps(events: pd.DataFrame) -> pd.DataFrame:
 def densify_time_series(events: pd.DataFrame, target_points: int = 700) -> pd.DataFrame:
     """Densify a reconstructed time series for article-like ABPM plots.
 
-    Some article figures were produced from a dense time series, while Darshan
-    POSIX aggregate records can provide a much sparser representation. This
-    function interpolates the numerical signals on a regular timestamp grid.
-    It is intended for visualization and threshold computation in the ABPM
-    figure, not for replacing the raw Darshan tables.
+    This function interpolates the numerical signals on a regular timestamp grid.
     """
     if events.empty or target_points <= 0 or len(events) >= target_points:
         return events.copy()
@@ -808,7 +766,7 @@ def densify_time_series(events: pd.DataFrame, target_points: int = 700) -> pd.Da
     dense["application"] = str(out_unique["application"].mode().iloc[0]) if "application" in out_unique else "APP"
     dense["source"] = "DENSIFIED_" + str(out_unique["source"].mode().iloc[0]) if "source" in out_unique else "DENSIFIED"
 
-    # Interpolate continuous columns used by the paper.
+   
     for col in ["bandwidth_mb_s", "io_size_mb", "total_size_mb", "operation_count", "offset", "concurrent_io"]:
         if col in out_unique.columns:
             vals = pd.to_numeric(out_unique[col], errors="coerce").replace([np.inf, -np.inf], np.nan)
@@ -1021,8 +979,6 @@ def detect_adaptive(
     mean_rel = np.nanmean([rel_bw, rel_io])
     cyclic_strength = fft_features.get("cyclic_strength", np.nan)
 
-    # Article-plot mode is intentionally more sensitive than a classical 2-sigma/3-sigma
-    # anomaly detector, because the original ABPM figures highlight many local deviations.
     if mean_rel > 0.5 and cyclic_strength > 3:
         k = k_high + k_extra
     elif mean_rel > 0.5 or cyclic_strength > 3:
@@ -1047,9 +1003,6 @@ def detect_adaptive(
     if adaptive_rule == "dual":
         out["burst_adaptive"] = out["burst_adaptive_dual"]
     else:
-        # This matches the original plotted ABPM figures: red points are samples
-        # above the adaptive bandwidth threshold. The dual rule is still exported
-        # as burst_adaptive_dual for the formula-based analysis.
         out["burst_adaptive"] = out["burst_adaptive_bw_only"]
     if fixed_threshold_value is not None and math.isfinite(float(fixed_threshold_value)):
         fixed = float(fixed_threshold_value)
@@ -1405,10 +1358,7 @@ def main():
         posix_events = posix_to_article_events(posix)
         dxt_events = dxt_to_events(dxt)
 
-        # For POSIX-only logs such as E3SM, reconstruct a dense time series by
-        # temporal binning over POSIX read/write start/end intervals. This is
-        # closer to the figure-generation method used in the paper than treating
-        # each aggregate POSIX record as one point.
+        # For POSIX-only logs such as E3SM.
         if app in op_expanded_posix_apps and not posix.empty:
             events = posix_to_operation_expanded_events(
                 posix,
@@ -1427,9 +1377,7 @@ def main():
             if not args.no_spread_posix_time:
                 events = spread_sparse_posix_timestamps(events)
 
-        # Optional scale is disabled by default. It is only useful if the
-        # historical figure used a different bandwidth normalization/unit and
-        # you want to reproduce the old visual scale exactly.
+        # Optional scale is disabled by default. 
         scale = float(bandwidth_scale_map.get(app, 1.0))
         if scale != 1.0 and not events.empty:
             events = events.copy()
@@ -1505,7 +1453,6 @@ def main():
     notes = [
         "# Reproduction notes",
         "",
-        "This run uses article-like reconstruction:",
         "- DXT_POSIX per-operation events are used for applications listed in --use-dxt-for when available.",
         "- POSIX aggregate records for selected apps are reconstructed by temporal binning over POSIX start/end intervals.",
         "- E3SM uses POSIX temporal binning by default with 1s bins and node normalization E3SM:8.",
@@ -1525,7 +1472,6 @@ def main():
         f"Node normalization: {args.nodes}",
         f"Optional bandwidth scale: {args.bandwidth_scale if args.bandwidth_scale else 'none'}",
         "",
-        "If a figure still differs from the historical article figure, it means the original figure was generated from an intermediate CSV/time series rather than from the Darshan aggregate records alone. In that case, provide the CSV with timestamp, bandwidth, I/O size, I/O type, offset, and concurrency columns and the plotting part of this script will reproduce it exactly.",
     ]
     if missing:
         notes += ["", "Missing workloads from Darshan input: " + ", ".join(missing)]
