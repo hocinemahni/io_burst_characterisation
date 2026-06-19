@@ -1,6 +1,6 @@
 # I/O Burst Characterisation and Prediction in HPC Systems
 
-This repository contains a clean, professional Python implementation to parse Darshan logs directly and reproduce the scientific analysis, figures, and metrics described in the article:
+This repository contains a Python implementation to parse Darshan logs directly and reproduce the scientific analysis, figures, and metrics described in the article:
 > **"Adaptive I/O Burst Characterization and Prediction in High-Performance Computing Systems"**
 
 The project is designed to run standalone with zero external C dependencies, parsing binary Darshan log files directly (POSIX and DXT modules) to characterize workload I/O behavior and predict I/O bursts using an adaptive prediction model.
