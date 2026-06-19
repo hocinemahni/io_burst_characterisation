@@ -20,3 +20,5 @@ clean_legacy.py
 clean_reproduce_script.py
 find_parentheses.py
 find_paper_like.py
+csv_results/
+
