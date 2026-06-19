@@ -56,7 +56,7 @@ MB = 1024.0 * 1024.0
 # ---------------------------------------------------------------------------
 # Darshan POSIX/DXT binary layouts.
 # ---------------------------------------------------------------------------
-APP_ORDER = ["NAMD", "E3SM", "HACC", "IOR"]
+APP_ORDER = ["NAMD", "E3SM", "HACC", "IOR", "IOR_HDF5", "LIFE-SCIENCE", "YOMBO"]
 
 POSIX_COUNTERS = """
 POSIX_OPENS POSIX_FILENOS POSIX_DUPS POSIX_READS POSIX_WRITES POSIX_SEEKS
@@ -99,6 +99,12 @@ DXT_SEGMENT_SIZE = 8 + 8 + 8 + 8
 # ---------------------------------------------------------------------------
 def infer_app_name(path: Path) -> str:
     name = path.name.lower()
+    if "ior_hdf5" in name:
+        return "IOR_HDF5"
+    if "life-science" in name or "lifescience" in name:
+        return "LIFE-SCIENCE"
+    if "yombo" in name:
+        return "YOMBO"
     if "namd" in name:
         return "NAMD"
     if "e3sm" in name:
@@ -635,7 +641,7 @@ def posix_to_operation_expanded_events(
     out = out.sort_values("timestamp").reset_index(drop=True)
     out["timestamp"] = out["timestamp"] - float(out["timestamp"].min())
     out["end_time"] = out["end_time"] - float(out["end_time"].min())
-.
+
     if max_points and len(out) > max_points:
         idx = np.linspace(0, len(out) - 1, int(max_points)).round().astype(int)
         out = out.iloc[idx].copy().reset_index(drop=True)
@@ -883,7 +889,7 @@ def fft_spectrum(events: pd.DataFrame) -> Tuple[pd.DataFrame, Dict[str, float]]:
 
 def compute_tables(events_by_app: Dict[str, pd.DataFrame]) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     summary_rows, corr_rows, entropy_rows, fft_rows = [], [], [], []
-    for app in natural_app_sort(events_by_app.keys()):
+    for app in natural_app_sort([a for a in events_by_app.keys() if a in APP_ORDER]):
         df = events_by_app[app]
         if df.empty:
             continue
@@ -936,7 +942,7 @@ def compute_tables(events_by_app: Dict[str, pd.DataFrame]) -> Tuple[pd.DataFrame
 
 def compute_io_characteristics_from_posix(raw_posix_by_app: Dict[str, pd.DataFrame]) -> pd.DataFrame:
     rows = []
-    for app in natural_app_sort(raw_posix_by_app.keys()):
+    for app in natural_app_sort([a for a in raw_posix_by_app.keys() if a in APP_ORDER]):
         df = raw_posix_by_app[app]
         if df is None or df.empty:
             continue
@@ -1242,7 +1248,7 @@ def combined_grid(apps: List[str], plot_func, title: str, outpath: Path, ncols: 
 
 
 def save_combined_figures(events_by_app: Dict[str, pd.DataFrame], detections_by_app: Dict[str, pd.DataFrame], figdir: Path, abpm_red_mode_map: Optional[Dict[str, str]] = None):
-    apps = natural_app_sort([a for a, df in events_by_app.items() if not df.empty])
+    apps = natural_app_sort([a for a, df in events_by_app.items() if not df.empty and a in APP_ORDER])
     if not apps:
         return
 
@@ -1318,8 +1324,8 @@ def main():
     parser.add_argument("--k-extra", type=float, default=0.3, help="Extra multiplier when entropy and cyclicity are both high.")
     parser.add_argument("--densify-apps", default="E3SM", help="Comma-separated apps to densify for ABPM detection plots, default E3SM.")
     parser.add_argument("--target-points", type=int, default=700, help="Number of points after densification for ABPM plots, default 700.")
-    parser.add_argument("--use-dxt-for", default="NAMD,HACC,IOR", help="Comma-separated apps for which DXT should be preferred when available.")
-    parser.add_argument("--detection-apps", default="E3SM,HACC,IOR", help="Comma-separated apps for adaptive detection figures.")
+    parser.add_argument("--use-dxt-for", default="NAMD,HACC,IOR,IOR_HDF5,LIFE-SCIENCE,YOMBO", help="Comma-separated apps for which DXT should be preferred when available.")
+    parser.add_argument("--detection-apps", default="E3SM,HACC,IOR,IOR_HDF5,LIFE-SCIENCE,YOMBO", help="Comma-separated apps for adaptive detection figures.")
     parser.add_argument("--no-spread-posix-time", action="store_true", help="Do not spread sparse POSIX aggregate timestamps over the application interval.")
     parser.add_argument("--clean", action="store_true", help="Remove output directory before running.")
     args = parser.parse_args()
@@ -1407,7 +1413,7 @@ def main():
 
     detections_by_app: Dict[str, pd.DataFrame] = {}
     det_rows = []
-    for app in natural_app_sort(events_by_app.keys()):
+    for app in natural_app_sort([a for a in events_by_app.keys() if a in APP_ORDER]):
         df = events_by_app[app]
         save_single_bandwidth(app, df, figdir)
         save_single_pdf_cdf(app, df, figdir)
