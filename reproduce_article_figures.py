@@ -1144,8 +1144,6 @@ def plot_detection_on_ax(
     ax,
     app: str,
     detected: pd.DataFrame,
-    fixed_label: str = "Fixed Threshold",
-    abpm_red_mode: str = "bursts",
 ):
     """ABPM figure — model applied exactly as described in the article.
 
@@ -1218,11 +1216,11 @@ def plot_detection_on_ax(
     ax.legend(fontsize=11, loc="best", framealpha=0.9)
 
 
-def save_single_detection(app: str, detected: pd.DataFrame, figdir: Path, abpm_red_mode: str = "bursts"):
+def save_single_detection(app: str, detected: pd.DataFrame, figdir: Path):
     abpm_dir = figdir / "abpm"
     abpm_dir.mkdir(exist_ok=True)
     fig, ax = plt.subplots(figsize=(6.8, 3.8))
-    plot_detection_on_ax(ax, app, detected, abpm_red_mode=abpm_red_mode)
+    plot_detection_on_ax(ax, app, detected)
     fig.tight_layout(rect=[0, 0, 1, 0.97])
     fig.savefig(abpm_dir / f"{app}_ABPM.png", dpi=300)
     plt.close(fig)
@@ -1247,7 +1245,7 @@ def combined_grid(apps: List[str], plot_func, title: str, outpath: Path, ncols: 
     plt.close(fig)
 
 
-def save_combined_figures(events_by_app: Dict[str, pd.DataFrame], detections_by_app: Dict[str, pd.DataFrame], figdir: Path, abpm_red_mode_map: Optional[Dict[str, str]] = None):
+def save_combined_figures(events_by_app: Dict[str, pd.DataFrame], detections_by_app: Dict[str, pd.DataFrame], figdir: Path):
     apps = natural_app_sort([a for a, df in events_by_app.items() if not df.empty and a in APP_ORDER])
     if not apps:
         return
@@ -1295,7 +1293,7 @@ def save_combined_figures(events_by_app: Dict[str, pd.DataFrame], detections_by_
     det_apps = natural_app_sort([a for a, df in detections_by_app.items() if not df.empty])
     if det_apps:
         def det_ax(ax, app):
-            plot_detection_on_ax(ax, app, detections_by_app[app], abpm_red_mode=(abpm_red_mode_map or {}).get(app, "bursts"))
+            plot_detection_on_ax(ax, app, detections_by_app[app])
         combined_grid(det_apps, det_ax, "Detected I/O Bursts Using Adaptive Prediction Model", figdir / "Fig5_Detected_IO_Bursts_Adaptive_Model.png", ncols=2, figsize=(12, 4.2 * math.ceil(len(det_apps)/2)))
 
 
