@@ -1,91 +1,105 @@
-# I/O Burst Characterisation and Prediction in HPC Systems
+# Adaptive I/O Burst Characterization and Detection
 
-This repository contains a Python implementation to parse Darshan logs directly and reproduce the scientific analysis, figures, and metrics described in the article:
-> **"Adaptive I/O Burst Characterization and Prediction in High-Performance Computing Systems"**
+Reproducible code for the causal event-level I/O-burst study based on Darshan POSIX/DXT traces.
 
-The project is designed to run standalone with zero external C dependencies, parsing binary Darshan log files directly (POSIX and DXT modules) to characterize workload I/O behavior and predict I/O bursts using an adaptive prediction model.
+## Methodological rules implemented in the code
 
----
+- Detection uses DXT segment timing; POSIX aggregates are not expanded into invented operation timelines.
+- A real temporal trace is accepted only when total DXT bytes agree with POSIX bytes within 5%.
+- Bandwidth is regularized at 10 ms; DXT bytes are conserved by overlap-weighted binning.
+- Every threshold at time `t` uses samples strictly before `t`.
+- The detector uses aggregate bandwidth; I/O size remains a characterization variable.
+- Candidate crossings are converted to events with a 3-of-5 persistence rule and one-bin-gap merging.
+- Controlled accuracy uses independent injected events and one-to-one temporal-IoU matching.
+- Real Darshan detections are descriptive only; they are not treated as contention labels.
 
-## Key Features
+## Files
 
-- **Direct Binary Parser**: Custom binary parser for Darshan logs (handling POSIX and DXT records) written in Python without requiring the heavy C-based `darshan-parser` utility or the `darshan` library.
-- **Advanced Temporal Reconstruction**:
-  - Reconstructs aggregate POSIX records via temporal binning and operation-expansion to recreate high-fidelity dense bandwidth time series.
-  - Utilizes per-operation DXT (Darshan eXtended Tracing) logs when available (e.g., for NAMD, HACC, and IOR).
-- **Statistical Analysis**: Computes bandwidth CDF/PDF distributions, Autocorrelation Function (ACF) lag profiles, and Fast Fourier Transform (FFT) power spectra.
-- **Adaptive Burst Prediction Model (ABPM)**: Implements the adaptive sliding window thresholding algorithm:
-  $$T_{\text{adaptive}}(t) = \mu_{\text{bw}}(t) + k \cdot \sigma_{\text{bw}}(t)$$
-  and compares it against fixed threshold benchmarks ($P_{95}$).
-
----
+```text
+reproduce_article_figures.py   Darshan parsing, characterization, real-trace detection,
+                               primary controlled benchmark and sensitivity helpers
+extended_validation.py         IoU 0.30/0.50 evaluation, calibrated mu+k sigma baseline,
+                               bootstrap CIs and amplitude-duration sweep
+tests/test_detector.py         Causality, byte conservation and event-matching tests
+requirements.txt               Python dependencies
+pytest.ini                     Test import path
+```
 
 ## Installation
 
-The tool requires standard data science libraries (`numpy`, `pandas`, `matplotlib`).
+Python 3.10+ is recommended.
 
-1. Clone this repository:
-   ```bash
-   git clone https://github.com/hocinemahni/io_burst_characterisation.git
-   cd io_burst_characterisation
-   ```
-
-2. Install dependencies:
-   ```bash
-   pip install -r requirements.txt
-   ```
-
----
-
-## Usage
-
-### 1. Place your Darshan logs
-Create a folder named `logs/` in the root directory and place your `.darshan` log files there:
-```text
-logs/
-  e3sm_xxxx.darshan
-  hacc_xxxx.darshan
-  namd_xxxx.darshan
-```
-
-### 2. Run the reproduction pipeline
-Execute the pipeline script to parse the logs, execute the mathematical models, and generate all tables and figures:
 ```bash
-python reproduce_article_figures.py --input-dir logs --output-dir output_results --clean
+python -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
+python -m pip install pytest
 ```
 
-### Command Line Arguments
-- `--input-dir`: Directory containing `.darshan` files (default: `logs`).
-- `--output-dir`: Directory where CSV tables and figures will be saved (default: `output_results`).
-- `--window`: Sliding window size ($w$) for adaptive detection (default: `15`).
-- `--fixed-percentile`: Percentile value for the fixed threshold baseline (default: `95.0`).
-- `--adaptive-rule`: Rule for adaptive burst markers (`bw_only` or `dual`).
-- `--k-low` / `--k-high` / `--k-extra`: Multipliers for the adaptive threshold envelope.
-- `--clean`: Clean the output directory before starting.
+Windows PowerShell activation:
 
----
+```powershell
+.\.venv\Scripts\Activate.ps1
+```
 
-## Generated Outputs
+## Tests
 
-The pipeline generates the following assets in your output directory:
+```bash
+python -m py_compile reproduce_article_figures.py extended_validation.py tests/test_detector.py
+python -m pytest -q
+```
 
-### 1. Numerical CSV Data (`csv/`)
-- `darshan_parse_summary.csv`: Parsing summary and record counts.
-- `io_characteristics_from_darshan_posix.csv`: Statistical summaries of POSIX trace records.
-- `summary_metrics_from_figure_events.csv`: Metrics including average, max, and variance bandwidths.
-- `correlation_metrics_from_figure_events.csv`: Autocorrelation characteristics.
-- `entropy_metrics_from_figure_events.csv`: Shannon entropy values for each workload.
-- `dominant_frequency_metrics_from_figure_events.csv`: Dominant frequencies extracted via FFT analysis.
-- `adaptive_detection_summary.csv`: Summary metrics of detected burst events.
+Expected test result:
 
-### 2. Scientific Figures (`figures/`)
-- **Figure 1 (Bandwidth Variation)**: High-resolution time-series trace of aggregate IO bandwidth for each workload.
-- **Figure 2 (PDF & CDF)**: Probability Density Function and Cumulative Distribution Function showing bandwidth distributions.
-- **Figure 3 (ACF)**: Autocorrelation coefficient curves showing periodicity and self-similarity of IO traces.
-- **Figure 4 (FFT)**: Fast Fourier Transform power spectrum identifying dominant frequency peaks.
-- **Figure 5 (Burst Detection)**: Visual comparison of I/O bursts detected using the Adaptive Prediction Model vs. a fixed-threshold baseline ($P_{95}$).
+```text
+6 passed
+```
 
----
+## Real traces and characterization
 
-## License
-This project is licensed under the MIT License.
+Place the Darshan logs in `logs/`, then run:
+
+```bash
+python reproduce_article_figures.py \
+  --input-dir logs \
+  --output-dir results/real \
+  --synthetic-seeds 30 \
+  --skip-sensitivity \
+  --clean
+```
+
+The DXT/POSIX coverage check is written to `results/real/csv/dxt_coverage.csv`.
+Only traces marked `dxt_complete=True` are used for real temporal detections.
+
+For the trace set used in the experiments, the accepted temporal traces are NAMD, HACC and YOMBO.
+E3SM has no DXT stream; LIFE-SCIENCE has incomplete DXT coverage; the IOR-HDF5 example has inconsistent/overlapping DXT coverage.
+
+## Controlled event-level evaluation
+
+Run the controlled evaluation with:
+
+```bash
+python extended_validation.py \
+  --output-dir results/controlled \
+  --seeds 30 \
+  --sweep-seeds 6 \
+  --sensitivity-seeds 30
+```
+
+Primary matching uses temporal IoU >= 0.30; IoU >= 0.50 is reported as a stricter criterion.
+The sensitivity set uses seeds 1000--1029, disjoint from the primary benchmark, and evaluates:
+
+- `W = {0.5, 1, 2, 4, 8, 15}` s at `tau=3`, `C_min=0.25`;
+- `tau = {3, 3.5, 4}` at `W=2` s, `C_min=0.25`;
+- `C_min = {0.20, 0.25, 0.30}` at `W=2` s, `tau=3`.
+
+The calibrated `mu+k sigma` reference is fitted on an independent burst-free realization of the same background regime and then frozen on the test trace. Global P95 is retained as a simple non-causal reference.
+
+## Scientific scope
+
+Injected events provide detector-independent statistical labels; they do not prove storage saturation or application slowdown. Production validation requires independent system-level signals such as storage utilization, queueing or application slowdown.
+
+The lightweight Darshan binary parser is included for reproducibility. Archival results should also be cross-checked with the official Darshan/PyDarshan toolchain.
+
+Before redistributing Darshan logs, verify that paths, user/job metadata and trace redistribution rights are safe for public release.
