@@ -1,0 +1,37 @@
+services:
+  tests:
+    build: .
+    command: ["python", "-m", "pytest", "-q"]
+
+  controlled:
+    build: .
+    command:
+      - python
+      - extended_validation.py
+      - --output-dir
+      - /app/results/controlled
+      - --seeds
+      - "30"
+      - --sweep-seeds
+      - "6"
+      - --sensitivity-seeds
+      - "30"
+    volumes:
+      - ./results:/app/results
+
+  real:
+    build: .
+    command:
+      - python
+      - reproduce_article_figures.py
+      - --input-dir
+      - /app/logs
+      - --output-dir
+      - /app/results/real
+      - --synthetic-seeds
+      - "30"
+      - --skip-sensitivity
+      - --clean
+    volumes:
+      - ./logs:/app/logs:ro
+      - ./results:/app/results
